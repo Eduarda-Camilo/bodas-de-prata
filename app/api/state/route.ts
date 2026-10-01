@@ -45,7 +45,11 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     await authorize(request);
-    const body = await request.json();
+    const body = await request.json().catch(() => {
+      throw new ApiError(400, "Não foi possível ler esta etapa.");
+    });
+    if (!body || typeof body !== "object")
+      throw new ApiError(400, "Etapa inválida.");
     if (
       typeof body.completed !== "boolean" ||
       typeof body.id !== "string" ||
@@ -53,13 +57,11 @@ export async function PATCH(request: Request) {
         !preparation.some((p) => `prep-${p.id}` === body.id))
     )
       throw new ApiError(400, "Etapa inválida.");
-    const { error } = await db()
-      .from("checks")
-      .upsert({
-        id: body.id,
-        completed: body.completed,
-        updated_at: new Date().toISOString(),
-      });
+    const { error } = await db().from("checks").upsert({
+      id: body.id,
+      completed: body.completed,
+      updated_at: new Date().toISOString(),
+    });
     if (error) throw new Error("Database");
     return Response.json({ ok: true });
   } catch (e) {

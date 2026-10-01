@@ -43,7 +43,7 @@ npm start
 - `public/`: mapa/arte própria em SVG, ícones PWA, manifest e service worker.
 - `tests/`: testes de dados/Maps/fuso e fluxos de navegador.
 
-A interface usa fundo branco, tokens CSS em `app/globals.css`, tipografia editorial nos títulos, ícones Lucide e Tailwind CSS 4 disponível. Não depende de fontes externas. A arte da abertura é uma **ilustração autoral**, não uma foto de referência de algum estabelecimento. Leaflet carrega somente quando o mapa é aberto. O fundo funcional usa CARTO Positron (dados OpenStreetMap), com atribuição aos dois provedores e sem chave de API. A origem das requisições é identificada pelo navegador; a URL com token continua protegida por `no-referrer` na rota de sessão. Os dois mapas têm funções distintas: SVG emocional e mapa interativo funcional, sem chave paga.
+A interface usa fundo branco, tokens CSS em `app/globals.css`, fonte Nunito arredondada, sem serifa, com títulos em pesos fortes, ícones Lucide e Tailwind CSS 4 disponível. A fonte está no pacote `@fontsource-variable/nunito` e é servida pelo próprio site, sem buscar fontes no Google. A arte da abertura é uma **ilustração autoral**, não uma foto de referência de algum estabelecimento. Leaflet carrega somente quando o mapa é aberto. O fundo funcional usa CARTO Positron (dados OpenStreetMap), com atribuição aos dois provedores e sem chave de API. A origem das requisições é identificada pelo navegador; a URL com token continua protegida por `no-referrer` na rota de sessão. Os dois mapas têm funções distintas: SVG emocional e mapa interativo funcional, sem chave paga.
 
 ## Completar o roteiro pelo código
 
@@ -87,8 +87,8 @@ Coloque as imagens em `public/referencias/` e preencha:
 
 ```ts
 referenceImages: [
-  {src: '/referencias/fachada.jpg', alt: 'Fachada da pousada reservada'},
-]
+  { src: "/referencias/fachada.jpg", alt: "Fachada da pousada reservada" },
+];
 ```
 
 São exibidas em um carrossel horizontal como **Fotos do local**. Use imagens suas ou que você tenha permissão para utilizar. **Fotos de vocês** vêm do Drive, por uma API autenticada, e nunca desta pasta.
@@ -106,6 +106,14 @@ Os valores de `cities` são centros aproximados apenas para cartografia. Para um
 Use `buildGoogleMapsDirectionsUrl(route)` para deslocamentos com origem fixa, destino e `waypoints`; `buildGoogleMapsPlaceUrl(location)` abre somente o destino e deixa a origem a cargo do celular. Nenhum desses botões pede geolocalização ao site. Uma URL de lugar verificada pode ser cadastrada em `googleMapsUrl`.
 
 A volta mantém **Paraty → Angra dos Reis → Barra Mansa → Volta Redonda → Três Rios → Juiz de Fora → Barbacena → Conselheiro Lafaiete → Belo Horizonte**. Os dois trechos têm três waypoints cada, respeitando a limitação mobile documentada das Google Maps URLs. O primeiro termina em Três Rios e o segundo começa ali. A rota inteira é uma opção secundária com aviso de compatibilidade. Nenhuma cidade é descartada silenciosamente.
+
+## Localização no celular
+
+Ao abrir **Mapa**, o site solicita a permissão de localização do navegador e mostra “Vocês estão aqui”. A posição acompanha as atualizações do GPS enquanto essa aba estiver aberta; ao sair, o acompanhamento termina. O botão “Nossa localização” recentraliza, e “Ver toda a viagem no mapa” retorna ao roteiro completo. Uma perda temporária de sinal permite recuperar a posição automaticamente. Negar a permissão não impede consultar roteiro, pontos ou abrir Google Maps.
+
+É necessário **HTTPS** no celular. `http://localhost:3000` funciona no computador, mas um endereço de rede como `http://192.168.x.x:3000` aberto no celular normalmente não permite GPS; use o domínio HTTPS publicado para testar no aparelho. Se a permissão foi negada, libere localização nas configurações do site no navegador. Não usamos a posição para marcar etapas automaticamente.
+
+As coordenadas não são gravadas no banco, no Drive ou em histórico, nem enviadas à nossa API. O provedor cartográfico recebe as requisições das imagens da região exibida. A cidade próxima é uma indicação aproximada, exibida apenas quando o sinal tem precisão suficiente; não confirma chegada a um estabelecimento.
 
 ## Supabase: persistência compartilhada
 
@@ -219,8 +227,8 @@ As integrações estão implementadas, mas só podem ser validadas de ponta a po
 ## Validação nesta implementação
 
 - Instalação reproduzida com `npm ci` pelo lockfile; lint, TypeScript e build passaram sem credenciais externas.
-- 8 testes de dados e processamento de imagens: fuso, cronograma, IDs, Maps, volta sem perder cidades, decodificação, formato e remoção de metadados.
-- 9 testes de navegador Chromium: 360/390/430 px sem overflow horizontal, onboarding, navegação, ausência de erros JavaScript de runtime, acesso privado/cookie/CSRF, checks entre dois contextos com API simulada, rollback/offline, detalhes, carimbos pendentes, uploads com retry/exclusão e shell PWA offline, dimensões das modais mobile com conteúdo curto/longo e recuperação do mapa após falha.
+- 11 testes de dados e processamento de imagens: fuso, cronograma, IDs, Maps, volta sem perder cidades, decodificação, formato e remoção de metadados.
+- 12 testes de navegador Chromium: 360/390/430 px sem overflow horizontal, onboarding, navegação, ausência de erros JavaScript de runtime, acesso privado/cookie/CSRF, checks entre dois contextos com API simulada, rollback/offline, detalhes, carimbos pendentes, uploads com retry/exclusão e shell PWA offline, dimensões das modais mobile com conteúdo curto/longo e recuperação do mapa após falha, tipografia/contraste e localização real do navegador com atualização de posição e tratamento de permissão negada/timeout.
 - Auditoria npm: nenhuma vulnerabilidade conhecida nas versões do lockfile durante a verificação.
 - O provedor anterior OpenStreetMap direto apresentou bloqueio de uso no Windows. O fundo agora usa a CDN CARTO Positron; o header das páginas também foi corrigido para identificar a origem, mantendo `no-referrer` na sessão. Em falha de rede, a camada de ruas é removida, os pontos/rotas permanecem e há um botão para tentar novamente. A política desta máquina da nuvem bloqueia também o acesso real à CDN (CONNECT 403); os testes de carregamento/recuperação usam imagens simuladas. Os domínios `a.basemaps.cartocdn.com`, `b.basemaps.cartocdn.com`, `c.basemaps.cartocdn.com` e `d.basemaps.cartocdn.com` foram adicionados ao rascunho de rede, preservando os anteriores. Confirme o carregamento real no seu navegador após atualizar o projeto.
 - Supabase e OAuth/Drive reais ainda não foram testados: credenciais não foram fornecidas. Teste esses serviços antes de entregar o link definitivo aos seus pais.
@@ -242,7 +250,6 @@ A opção de ExecutionPolicy vale somente para esse processo, não altera a pol�
 Antes de editar em qualquer máquina: `git status`, seguido de `git pull --ff-only origin main` com a árvore limpa. Depois de editar: revise `git diff`, faça commit e `git push origin main`. Antes de pedir continuação nesta nuvem, envie suas alterações locais ao GitHub; antes de continuar no Windows, puxe os commits publicados daqui. Não edite os mesmos arquivos simultaneamente nas duas máquinas. Isso reduz conflitos; nenhum fluxo pode garantir ausência absoluta de conflitos quando existem alterações paralelas.
 
 Nunca use `git reset --hard`, `git clean -fd`, `git push --force` ou substitua a pasta `.git` para sincronizar. Se `--ff-only` falhar, pare e resolva os commits divergentes preservando os dois lados. `.env.local`, `.env.drive`, `node_modules` e `.next` são locais/ignorados e não devem ser copiados para o GitHub.
-
 
 ## Comportamento das modais
 

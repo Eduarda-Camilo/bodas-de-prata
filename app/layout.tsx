@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/nunito";
 import "./globals.css";
 export const metadata: Metadata = {
   title: "Bodas de Prata · Cleide & Flávio",
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#9b492f",
+  themeColor: "#aa3d2e",
 };
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (

@@ -73,6 +73,7 @@ export default function TravelApp({
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const pendingRef = useRef(new Set<string>());
   const generation = useRef(0);
+  const syncSequence = useRef(0);
   const [message, setMessage] = useState("");
   const [sync, setSync] = useState<"loading" | "ok" | "error" | "unconfigured">(
     authorized ? "loading" : "unconfigured",
@@ -138,16 +139,21 @@ export default function TravelApp({
   const synchronize = useCallback(async () => {
     if (!authorized || pendingRef.current.size) return;
     const version = generation.current;
+    const sequence = ++syncSequence.current;
     try {
       const response = await fetch("/api/state", { cache: "no-store" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      if (version === generation.current && !pendingRef.current.size) {
+      if (
+        sequence === syncSequence.current &&
+        version === generation.current &&
+        !pendingRef.current.size
+      ) {
         setState(data);
         setSync(data.configured ? "ok" : "unconfigured");
       }
     } catch {
-      setSync("error");
+      if (sequence === syncSequence.current) setSync("error");
     }
   }, [authorized]);
   useEffect(() => {
@@ -245,28 +251,17 @@ export default function TravelApp({
     <>
       {onboarding && <Onboarding onFinish={finishWelcome} />}
       <div className="app-shell" inert={onboarding}>
-        <header className="app-header">
-          <button
-            className="brand"
-            onClick={() => navigate("today")}
-            aria-label="Bodas de Prata, início"
-          >
-            <span className="brand-mark">
-              25<span>ANOS</span>
-            </span>
-            <span>
-              Bodas de Prata<small>CLEIDE & FLÁVIO</small>
-            </span>
-          </button>
-          <span className="header-date">
-            08—16 NOV<small>2026</small>
-          </span>
-        </header>
-        {!authorized && (
-          <div className="development-note">
-            Prévia do roteiro · checks e fotos precisam do acesso privado.
+        <div className="welcome-note">
+          <div>
+            <p>
+              Olá, <strong>Cleide e Flávio!</strong>
+            </p>
+            <span>Que bom viver esse caminho com vocês.</span>
           </div>
-        )}
+          <span className="welcome-sun" aria-hidden="true">
+            <Sun size={25} />
+          </span>
+        </div>
         {!online && (
           <div className="connection-banner" role="status">
             <WifiOff size={17} /> Sem sinal. Aproveitem o roteiro; sincronizamos
@@ -296,15 +291,20 @@ export default function TravelApp({
                     O melhor caminho
                     <br />é ao seu lado.
                   </h1>
-                  <p>Cleide & Flávio · 25 anos juntos</p>
+                  <p>09 dias · Minas, serras e mar</p>
                 </div>
-                <span className="hero-stamp">
-                  MINAS
-                  <br />
-                  <span>↓</span>
-                  <br />
-                  PARATY
+                <span className="hero-trip-tag">
+                  <Heart size={15} aria-hidden="true" /> 25 anos juntos
                 </span>
+                <button
+                  className="button hero-button"
+                  onClick={() => {
+                    setDayIndex(currentIndex);
+                    navigate("itinerary");
+                  }}
+                >
+                  Explorar nosso roteiro <ArrowRight size={20} />
+                </button>
               </section>
               <div className="page-body">
                 <div className="greeting-line">
@@ -784,6 +784,12 @@ export default function TravelApp({
               )}
               {tripSection === "info" && (
                 <>
+                  {!authorized && (
+                    <p className="notice">
+                      Esta é uma prévia. Checks compartilhados e fotos estarão
+                      disponíveis depois da configuração do acesso privado.
+                    </p>
+                  )}
                   <div className="info-box">
                     <h2>Um guia no bolso</h2>
                     <p>

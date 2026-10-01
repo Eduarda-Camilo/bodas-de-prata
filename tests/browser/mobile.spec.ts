@@ -59,6 +59,16 @@ test("sessão privada, cookie seguro, APIs fechadas e validação dos IDs", asyn
     data: { id: "arbitrary-folder", completed: true },
   });
   expect(invalid.status()).toBe(400);
+  for (const body of ["null", "{"]) {
+    const malformed = await page.context().request.patch("/api/state", {
+      headers: {
+        Origin: "http://localhost:3100",
+        "Content-Type": "application/json",
+      },
+      data: body,
+    });
+    expect(malformed.status()).toBe(400);
+  }
   const unconfigured = await page.context().request.patch("/api/state", {
     headers: { Origin: "http://localhost:3100" },
     data: { id: "day-8-1", completed: true },
@@ -322,7 +332,7 @@ test("PWA preserva o roteiro visitado após recarregar sem conexão", async ({
     page.getByRole("heading", { name: "O melhor caminho" }),
   ).toBeVisible();
   await page.evaluate(async () => {
-    const cache = await caches.open("bodas-shell-v2");
+    const cache = await caches.open("bodas-shell-v3");
     if (!(await cache.match("/"))) throw new Error("Shell não cacheado");
   });
   await context.setOffline(true);
@@ -453,4 +463,175 @@ test("mapa usa CARTO com atribuição, mantém zoom ao sincronizar e recupera ap
   const marker = page.locator(".leaflet-marker-icon").nth(6);
   await marker.click();
   await expect(page.locator(".details-sheet[open]")).toBeVisible();
+});
+
+test("visual acolhedor sem header antigo, Nunito local e contrastes dos textos principais", async ({
+  page,
+}) => {
+  await open(page);
+  await expect(
+    page.getByText("Olá, Cleide e Flávio!", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".app-header,.brand,.development-note"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Explorar nosso roteiro" }),
+  ).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const typography = await page
+    .getByRole("heading", { name: "O melhor caminho" })
+    .evaluate((el) => ({
+      font: getComputedStyle(el).fontFamily,
+      weight: getComputedStyle(el).fontWeight,
+      background: getComputedStyle(document.body).backgroundColor,
+    }));
+  expect(typography.font).toContain("Nunito");
+  expect(Number(typography.weight)).toBeGreaterThanOrEqual(700);
+  await page.getByRole("button", { name: "Explorar nosso roteiro" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Nosso roteiro" }),
+  ).toBeVisible();
+  for (const width of [360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const section of ["Hoje", "Roteiro", "Viagem"]) {
+      await nav(page, section);
+      expect(await page.evaluate(() => innerWidth)).toBe(width);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBeLessThanOrEqual(width);
+    }
+  }
+  const contrast = await page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    const value = (name: string) => {
+      const hex = style.getPropertyValue(name).trim().replace("#", "");
+      const rgb = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const linear = rgb.map((v) =>
+        v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4,
+      );
+      return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    };
+    const white = 1;
+    return {
+      primary: (white + 0.05) / (value("--primary") + 0.05),
+      foreground: (white + 0.05) / (value("--foreground") + 0.05),
+    };
+  });
+  expect(contrast.primary).toBeGreaterThan(4.5);
+  expect(contrast.foreground).toBeGreaterThan(7);
+  await nav(page, "Hoje");
+  await page.screenshot({ path: "/tmp/bodas-warm-home.png", fullPage: true });
+});
+
+test("localização real do navegador exige permissão, mostra o celular e atualiza sua posição", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({
+    latitude: -23.219,
+    longitude: -44.713,
+    accuracy: 35,
+  });
+  await open(page);
+  await page.route("**/*.basemaps.cartocdn.com/**", (r) =>
+    r.fulfill({ path: "public/icon-192.png", contentType: "image/png" }),
+  );
+  await nav(page, "Mapa");
+  await expect(
+    page.getByText("Nos arredores de Paraty", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".device-location-dot")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Nossa localização" }),
+  ).toBeEnabled();
+  const response = await page.context().request.get("/");
+  expect(response.headers()["permissions-policy"]).toContain(
+    "geolocation=(self)",
+  );
+  await context.setGeolocation({
+    latitude: -20.3856,
+    longitude: -43.5035,
+    accuracy: 50,
+  });
+  await expect(
+    page.getByText("Nos arredores de Ouro Preto", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".device-location-dot")).toHaveCount(1);
+  await page.getByRole("button", { name: "Ver toda a viagem no mapa" }).click();
+  await page.getByRole("button", { name: "Nossa localização" }).click();
+  await page.screenshot({ path: "/tmp/bodas-location-map.png" });
+  await nav(page, "Roteiro");
+  await expect(page.locator(".device-location-dot")).toHaveCount(0);
+});
+
+test("permissão negada, posição indisponível e timeout não impedem roteiro ou rotas", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        watchPosition(
+          _success: PositionCallback,
+          error: PositionErrorCallback,
+        ) {
+          queueMicrotask(() =>
+            error({
+              code: 1,
+              message: "Denied",
+              PERMISSION_DENIED: 1,
+              POSITION_UNAVAILABLE: 2,
+              TIMEOUT: 3,
+            }),
+          );
+          return 1;
+        },
+        clearWatch() {},
+      },
+    });
+  });
+  await open(page);
+  await page.route("**/*.basemaps.cartocdn.com/**", (r) => r.abort());
+  await nav(page, "Mapa");
+  await expect(page.getByText(/A localização não foi permitida/)).toBeVisible();
+  await expect(page.locator(".device-location-dot")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Localizar vocês" }),
+  ).toBeEnabled();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        watchPosition(
+          _success: PositionCallback,
+          error: PositionErrorCallback,
+        ) {
+          queueMicrotask(() =>
+            error({
+              code: 3,
+              message: "Timeout",
+              PERMISSION_DENIED: 1,
+              POSITION_UNAVAILABLE: 2,
+              TIMEOUT: 3,
+            }),
+          );
+          return 2;
+        },
+        clearWatch() {},
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Localizar vocês" }).click();
+  await expect(page.getByText(/A posição está demorando/)).toBeVisible();
+  await nav(page, "Roteiro");
+  await page
+    .getByRole("button", { name: "BH → Ouro Preto", exact: true })
+    .click();
+  await expect(
+    page
+      .locator(".details-sheet[open]")
+      .getByRole("link", { name: "Abrir rota no Google Maps" }),
+  ).toBeVisible();
 });

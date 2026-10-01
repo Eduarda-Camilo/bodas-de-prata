@@ -1,4 +1,4 @@
-import type { Location, Route } from "@/data/types";
+import type { Location, Route, TripEvent } from "@/data/types";
 export function buildGoogleMapsDirectionsUrl(route: Route) {
   const p = new URLSearchParams({
     api: "1",
@@ -15,4 +15,18 @@ export function buildGoogleMapsPlaceUrl(place: Location) {
     ? `${place.name}, ${place.address}, ${place.city}, ${place.state ?? ""}`
     : `${place.name}, ${place.city}, ${place.state ?? ""}`;
   return `https://www.google.com/maps/search/?${new URLSearchParams({ api: "1", query })}`;
+}
+
+export function getEventMapsUrl(event: TripEvent) {
+  if (event.route) return buildGoogleMapsDirectionsUrl(event.route);
+  const place = event.location;
+  const placeUrl =
+    place && place.name !== "A definir"
+      ? buildGoogleMapsPlaceUrl(place)
+      : undefined;
+  if (event.type === "stamp")
+    return event.stampPlace?.verified
+      ? (event.stampPlace.mapsUrl ?? placeUrl)
+      : undefined;
+  return placeUrl;
 }

@@ -104,3 +104,27 @@ test("Bodas e escuna têm destaque e restaurante ainda não inventado", () => {
     days[5].events.filter((e) => e.type === "boat").every((e) => e.important),
   );
 });
+
+test("carimbo confirmado sem URL usa o estabelecimento; carimbo não verificado nunca oferece rota", async () => {
+  const { getEventMapsUrl } = await import("../lib/maps");
+  const event = days[0].events.find((e) => e.type === "stamp")!;
+  const location = {
+    name: "Ponto cadastrado",
+    city: "Ouro Preto",
+    state: "MG",
+    address: "Endereço cadastrado",
+  };
+  assert.equal(getEventMapsUrl({ ...event, location }), undefined);
+  const url = getEventMapsUrl({
+    ...event,
+    location,
+    stampPlace: {
+      verified: true,
+      name: location.name,
+      address: location.address,
+      mapsUrl: null,
+    },
+  });
+  assert.ok(url?.includes("maps/search"));
+  assert.ok(new URL(url!).searchParams.get("query")?.includes(location.name));
+});

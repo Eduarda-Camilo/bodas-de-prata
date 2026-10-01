@@ -4,7 +4,16 @@ import type { TripEvent } from "@/data/types";
 import { cities, journey, returnJourney } from "@/data/places";
 import { categories } from "./Icons";
 import { mapTiles } from "@/lib/map-tiles";
-import type { Marker } from "leaflet";
+import type {
+  Marker,
+  Map as LeafletMap,
+  CircleMarker,
+  Circle,
+  LatLngBounds,
+} from "leaflet";
+import { LocateFixed, Route, MapPin } from "lucide-react";
+import useDeviceLocation from "./useDeviceLocation";
+import { nearbyCity } from "@/lib/geolocation";
 import "leaflet/dist/leaflet.css";
 const symbols: Record<string, string> = {
   stamp: "P",
@@ -26,6 +35,16 @@ export default function MapView({
   onSelect: (event: TripEvent) => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const { position, status, start } = useDeviceLocation();
+  const mapRef = useRef<LeafletMap | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
+  const positionMarker = useRef<CircleMarker | null>(null);
+  const accuracyCircle = useRef<Circle | null>(null);
+  const journeyBounds = useRef<LatLngBounds | null>(null);
+  const centered = useRef(false);
+  const [mapVersion, setMapVersion] = useState(0);
+  const city = position ? nearbyCity(position) : undefined;
+
   const [tileError, setTileError] = useState(false);
   const [retry, setRetry] = useState(0);
   const checksRef = useRef(checks);
@@ -49,6 +68,12 @@ export default function MapView({
         [-21.6, -44.35],
         7,
       );
+      mapRef.current = map;
+      leafletRef.current = L;
+      centered.current = false;
+      const colors = getComputedStyle(root.current);
+      const primary = colors.getPropertyValue("--primary").trim();
+      const secondary = colors.getPropertyValue("--secondary-accent").trim();
       const tiles = L.tileLayer(mapTiles.url, {
         attribution: mapTiles.attribution,
         subdomains: mapTiles.subdomains,
@@ -68,14 +93,14 @@ export default function MapView({
           (k) =>
             [cities[k].latitude!, cities[k].longitude!] as [number, number],
         ),
-        { color: "#9b492f", weight: 3 },
+        { color: primary, weight: 4 },
       ).addTo(map);
       L.polyline(
         returnJourney.map(
           (k) =>
             [cities[k].latitude!, cities[k].longitude!] as [number, number],
         ),
-        { color: "#647055", weight: 2, dashArray: "5 7" },
+        { color: secondary, weight: 2, dashArray: "5 7" },
       ).addTo(map);
       const markers: [number, number][] = [];
       for (const key of Array.from(new Set([...journey, ...returnJourney]))) {
@@ -121,10 +146,17 @@ export default function MapView({
           .addTo(map);
         placeMarkers.current.push({ event, marker });
       }
-      map.fitBounds(markers, { padding: [25, 25] });
+      journeyBounds.current = L.latLngBounds(markers);
+      map.fitBounds(journeyBounds.current, { padding: [35, 35] });
+      setMapVersion((value) => value + 1);
       cleanup = () => {
         placeMarkers.current = [];
         map.remove();
+        mapRef.current = null;
+        leafletRef.current = null;
+        positionMarker.current = null;
+        accuracyCircle.current = null;
+        journeyBounds.current = null;
       };
     });
     return () => {
@@ -132,13 +164,128 @@ export default function MapView({
       cleanup();
     };
   }, [events, onSelect, retry]);
+  useEffect(() => {
+    const map = mapRef.current,
+      L = leafletRef.current;
+    if (!map || !L) return;
+    if (!position) {
+      positionMarker.current?.remove();
+      accuracyCircle.current?.remove();
+      positionMarker.current = null;
+      accuracyCircle.current = null;
+      return;
+    }
+    const point: [number, number] = [position.latitude, position.longitude];
+    const styles = getComputedStyle(root.current!);
+    const color = styles.getPropertyValue("--primary").trim();
+    const fill = styles.getPropertyValue("--highlight").trim();
+    if (!accuracyCircle.current)
+      accuracyCircle.current = L.circle(point, {
+        radius: position.accuracy,
+        color,
+        fillColor: fill,
+        fillOpacity: 0.2,
+        weight: 1,
+        interactive: false,
+      }).addTo(map);
+    else accuracyCircle.current.setLatLng(point).setRadius(position.accuracy);
+    if (!positionMarker.current)
+      positionMarker.current = L.circleMarker(point, {
+        radius: 9,
+        color: "#ffffff",
+        fillColor: color,
+        fillOpacity: 1,
+        weight: 3,
+        className: "device-location-dot",
+      })
+        .bindTooltip("Vocês estão aqui")
+        .addTo(map);
+    else positionMarker.current.setLatLng(point);
+    positionMarker.current.bringToFront();
+    if (!centered.current) {
+      map.setView(point, 13);
+      centered.current = true;
+    }
+  }, [position, mapVersion]);
+  function centerOnDevice() {
+    if (!position) {
+      start();
+      return;
+    }
+    mapRef.current?.flyTo(
+      [position.latitude, position.longitude],
+      Math.max(mapRef.current.getZoom(), 13),
+      {
+        animate: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      },
+    );
+  }
+  function showJourney() {
+    if (journeyBounds.current)
+      mapRef.current?.fitBounds(journeyBounds.current, { padding: [35, 35] });
+  }
+  const locationText =
+    status === "active"
+      ? city
+        ? `Nos arredores de ${city}`
+        : "Vocês estão aqui, no mapa."
+      : status === "requesting"
+        ? "Permitam a localização no aviso do celular para aparecer no mapa."
+        : status === "denied"
+          ? "A localização não foi permitida. Vocês podem liberá-la nas configurações do navegador."
+          : status === "insecure"
+            ? "Para usar a localização no celular, abram a versão HTTPS da viagem."
+            : status === "timeout"
+              ? "A posição está demorando a chegar. Tentem de novo em um lugar com melhor sinal."
+              : "Não conseguimos encontrar a posição agora. Tentem novamente.";
   return (
     <>
+      <div className="map-stage">
+        <div
+          ref={root}
+          className="functional-map"
+          aria-label="Mapa interativo da viagem"
+        />
+        <div className="map-controls">
+          <button
+            className="map-control"
+            onClick={centerOnDevice}
+            disabled={status === "requesting"}
+          >
+            <LocateFixed size={20} />
+            {status === "requesting"
+              ? "Localizando…"
+              : position
+                ? "Nossa localização"
+                : "Localizar vocês"}
+          </button>
+          <button
+            className="map-control map-overview"
+            onClick={showJourney}
+            aria-label="Ver toda a viagem no mapa"
+          >
+            <Route size={20} />
+          </button>
+        </div>
+      </div>
       <div
-        ref={root}
-        className="functional-map"
-        aria-label="Mapa interativo da viagem"
-      />
+        className={`location-note ${status === "active" ? "location-active" : ""}`}
+        role="status"
+      >
+        <MapPin size={19} />
+        <div>
+          <strong>{locationText}</strong>
+          {position && (
+            <span>
+              Posição aproximada · margem de{" "}
+              {position.accuracy < 1000
+                ? `${Math.round(position.accuracy)} m`
+                : `${(position.accuracy / 1000).toFixed(1).replace(".", ",")} km`}
+            </span>
+          )}
+          <p>A posição aparece só neste celular. Não guardamos um histórico.</p>
+        </div>
+      </div>
       {tileError && (
         <div className="notice map-notice" role="status">
           <p>

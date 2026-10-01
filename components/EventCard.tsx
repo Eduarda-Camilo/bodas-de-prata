@@ -2,19 +2,9 @@
 import { ArrowUpRight, Check, ChevronRight, Undo2, Camera } from "lucide-react";
 import type { TripEvent, Route } from "@/data/types";
 import { eventIcons, categories } from "./Icons";
-import {
-  buildGoogleMapsDirectionsUrl,
-  buildGoogleMapsPlaceUrl,
-} from "@/lib/maps";
+import { buildGoogleMapsDirectionsUrl, getEventMapsUrl } from "@/lib/maps";
 export function GoogleMapsButton({ event }: { event: TripEvent }) {
-  const place = event.location;
-  const url = event.route
-    ? buildGoogleMapsDirectionsUrl(event.route)
-    : event.stampPlace?.verified
-      ? event.stampPlace.mapsUrl
-      : place && place.name !== "A definir"
-        ? buildGoogleMapsPlaceUrl(place)
-        : undefined;
+  const url = getEventMapsUrl(event);
   if (!url) return null;
   return (
     <a
