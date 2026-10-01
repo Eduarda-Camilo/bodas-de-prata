@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import BottomSheet from "./BottomSheet";
 import { X } from "lucide-react";
 import type { TripEvent, Photo } from "@/data/types";
 import { categories, eventIcons } from "./Icons";
@@ -26,40 +26,27 @@ export default function PlaceDetails({
   onUploaded: (p: Photo) => void;
   onDeleted: (id: string) => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const el = dialog.current;
-    if (event) {
-      el?.showModal();
-      el?.scrollTo(0, 0);
-    } else el?.close();
-  }, [event]);
   const Icon = event ? eventIcons[event.type] : X;
   return (
-    <dialog
-      ref={dialog}
+    <BottomSheet
+      open={Boolean(event)}
+      onClose={onClose}
       className="details-sheet"
-      onCancel={onClose}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      aria-labelledby="place-title"
+      labelledBy="place-title"
+      contentKey={event?.id}
+      closeLabel="Fechar detalhes"
+      heading={
+        event && (
+          <span className="eyebrow">
+            <Icon size={18} />
+            {categories[event.type]}
+          </span>
+        )
+      }
     >
       <div className="sheet-content">
         {event && (
           <>
-            <div className="sheet-top">
-              <span className="eyebrow">
-                <Icon size={18} /> {categories[event.type]}
-              </span>
-              <button
-                className="icon-button"
-                onClick={onClose}
-                aria-label="Fechar detalhes"
-              >
-                <X />
-              </button>
-            </div>
             <h2 id="place-title">{event.title}</h2>
             <p className="caption">
               {event.location?.city}
@@ -178,6 +165,6 @@ export default function PlaceDetails({
           </>
         )}
       </div>
-    </dialog>
+    </BottomSheet>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { Camera, ImagePlus, Trash2, X, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState, useId } from "react";
+import { Camera, ImagePlus, Trash2, RefreshCw } from "lucide-react";
 import type { Photo } from "@/data/types";
 import { compressImage } from "@/lib/compress";
+import BottomSheet from "./BottomSheet";
 export function PhotoUploader({
   eventId,
   enabled,
@@ -167,7 +168,7 @@ export function PhotoGallery({
   photos: Photo[];
   onDeleted: (id: string) => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   const [open, setOpen] = useState<Photo | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -181,7 +182,6 @@ export function PhotoGallery({
       });
       if (!response.ok) throw new Error((await response.json()).error);
       onDeleted(open.id);
-      dialog.current?.close();
       setOpen(null);
     } catch (e) {
       setError((e as Error).message);
@@ -200,7 +200,6 @@ export function PhotoGallery({
               setOpen(p);
               setConfirm(false);
               setError("");
-              dialog.current?.showModal();
             }}
             aria-label="Abrir foto ampliada"
           >
@@ -212,14 +211,15 @@ export function PhotoGallery({
           </button>
         ))}
       </div>
-      <dialog className="photo-dialog" ref={dialog}>
-        <button
-          className="icon-button close"
-          onClick={() => dialog.current?.close()}
-          aria-label="Fechar foto"
-        >
-          <X />
-        </button>
+      <BottomSheet
+        open={Boolean(open)}
+        onClose={() => setOpen(null)}
+        className="photo-dialog"
+        labelledBy={titleId}
+        closeLabel="Fechar foto"
+        heading={<h2 id={titleId}>Uma memória de vocês</h2>}
+        contentKey={open?.id}
+      >
         {open && (
           <>
             <img src={`/api/photos/${open.id}`} alt="Foto da viagem ampliada" />
@@ -260,7 +260,7 @@ export function PhotoGallery({
             )}
           </>
         )}
-      </dialog>
+      </BottomSheet>
     </>
   );
 }

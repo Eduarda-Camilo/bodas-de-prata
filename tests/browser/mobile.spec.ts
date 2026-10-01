@@ -54,19 +54,15 @@ test("sessão privada, cookie seguro, APIs fechadas e validação dos IDs", asyn
   const state = await page.context().request.get("/api/state");
   expect(state.status()).toBe(200);
   expect((await state.json()).configured).toBe(false);
-  const invalid = await page
-    .context()
-    .request.patch("/api/state", {
-      headers: { Origin: "http://localhost:3100" },
-      data: { id: "arbitrary-folder", completed: true },
-    });
+  const invalid = await page.context().request.patch("/api/state", {
+    headers: { Origin: "http://localhost:3100" },
+    data: { id: "arbitrary-folder", completed: true },
+  });
   expect(invalid.status()).toBe(400);
-  const unconfigured = await page
-    .context()
-    .request.patch("/api/state", {
-      headers: { Origin: "http://localhost:3100" },
-      data: { id: "day-8-1", completed: true },
-    });
+  const unconfigured = await page.context().request.patch("/api/state", {
+    headers: { Origin: "http://localhost:3100" },
+    data: { id: "day-8-1", completed: true },
+  });
   expect(unconfigured.status()).toBe(503);
 
   const result = await page.evaluate(async () => {
@@ -301,7 +297,7 @@ test("mapa funcional, fallback de tiles e expansão do mapa ilustrado", async ({
   page,
 }) => {
   await open(page);
-  await page.route("**/*.tile.openstreetmap.org/**", (r) => r.abort());
+  await page.route("**/*.basemaps.cartocdn.com/**", (r) => r.abort());
   await nav(page, "Mapa");
   await expect(page.locator(".leaflet-container")).toBeVisible();
   await expect(page.getByText(/O mapa de ruas não carregou/)).toBeVisible();
@@ -326,7 +322,7 @@ test("PWA preserva o roteiro visitado após recarregar sem conexão", async ({
     page.getByRole("heading", { name: "O melhor caminho" }),
   ).toBeVisible();
   await page.evaluate(async () => {
-    const cache = await caches.open("bodas-shell-v1");
+    const cache = await caches.open("bodas-shell-v2");
     if (!(await cache.match("/"))) throw new Error("Shell não cacheado");
   });
   await context.setOffline(true);
@@ -343,4 +339,118 @@ test("PWA preserva o roteiro visitado após recarregar sem conexão", async ({
     page.getByRole("button", { name: "Jantar das Bodas" }),
   ).toBeVisible();
   await context.setOffline(false);
+});
+
+test("modais mobile ocupam as laterais, ficam na base e variam de altura com o conteúdo", async ({
+  page,
+}) => {
+  await open(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const width of [360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await nav(page, "Roteiro");
+    await page.getByRole("button", { name: "DOM 8 NOV" }).click();
+    await page.getByRole("button", { name: "Bom dia, viagem!" }).click();
+    const dialog = page.locator(".details-sheet[open]");
+    await expect(dialog).toBeVisible();
+    const short = await dialog.boundingBox();
+    expect(short!.x).toBeCloseTo(0, 0);
+    expect(short!.width).toBeCloseTo(width, 0);
+    expect(short!.y + short!.height).toBeCloseTo(844, 0);
+    expect(short!.height).toBeLessThan(500);
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe(
+      "hidden",
+    );
+    const close = dialog.getByRole("button", { name: "Fechar detalhes" });
+    const closeBox = await close.boundingBox();
+    expect(closeBox!.x).toBeGreaterThan(width - 80);
+    await page.screenshot({ path: `/tmp/bodas-short-sheet-${width}.png` });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+    await page.getByRole("button", { name: "SEG 16 NOV" }).click();
+    await page
+      .getByRole("button", { name: "A estrada de volta para casa" })
+      .click();
+    const long = await dialog.boundingBox();
+    expect(long!.height).toBeGreaterThan(short!.height + 100);
+    expect(long!.height).toBeLessThanOrEqual(844 * 0.92 + 1);
+    expect(long!.y + long!.height).toBeCloseTo(844, 0);
+    expect(long!.width).toBeCloseTo(width, 0);
+    await dialog
+      .locator(".bottom-sheet-body")
+      .evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    await expect(close).toBeInViewport();
+    await page.screenshot({ path: `/tmp/bodas-long-sheet-${width}.png` });
+    await close.click();
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+  }
+  await nav(page, "Mapa");
+  await page.route("**/*.basemaps.cartocdn.com/**", (r) => r.abort());
+  await page.getByRole("button", { name: "Ampliar", exact: true }).click();
+  const mapDialog = page.locator(".expanded-map-dialog[open]");
+  const box = await mapDialog.boundingBox();
+  expect(box!.width).toBeCloseTo(430, 0);
+  expect(box!.y + box!.height).toBeCloseTo(844, 0);
+  await page.getByRole("button", { name: "Fechar mapa ilustrado" }).click();
+});
+
+test("mapa usa CARTO com atribuição, mantém zoom ao sincronizar e recupera após falha", async ({
+  page,
+}) => {
+  await open(page);
+  let unavailable = true;
+  const tileRequests: string[] = [];
+  await page.route("**/*.basemaps.cartocdn.com/**", (r) => {
+    tileRequests.push(r.request().url());
+    return unavailable
+      ? r.abort()
+      : r.fulfill({ path: "public/icon-192.png", contentType: "image/png" });
+  });
+  await nav(page, "Mapa");
+  await expect(page.getByText(/O mapa de ruas não carregou/)).toBeVisible();
+  await expect(page.locator(".leaflet-tile-pane img")).toHaveCount(0);
+  unavailable = false;
+  await page.getByRole("button", { name: "Tentar carregar o mapa" }).click();
+  await expect(page.locator(".leaflet-tile-loaded").first()).toBeVisible();
+  await expect(page.getByText(/O mapa de ruas não carregou/)).not.toBeVisible();
+  await expect(page.locator(".leaflet-control-attribution")).toContainText(
+    "CARTO",
+  );
+  expect(tileRequests.every((url) => url.includes("/light_all/"))).toBe(true);
+  const header = await page.context().request.get("/");
+  expect(header.headers()["referrer-policy"]).toBe(
+    "strict-origin-when-cross-origin",
+  );
+  const privateLink = await page
+    .context()
+    .request.get("/api/session?token=invalid");
+  expect(privateLink.headers()["referrer-policy"]).toBe("no-referrer");
+  const map = page.locator(".leaflet-container");
+  await page.locator(".leaflet-control-zoom-in").click();
+  const instance = await map.evaluate(
+    (element) => (element as HTMLElement & { _leaflet_id: number })._leaflet_id,
+  );
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/state") &&
+      response.request().method() === "GET",
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await refreshed;
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  expect(
+    await map.evaluate(
+      (element) =>
+        (element as HTMLElement & { _leaflet_id: number })._leaflet_id,
+    ),
+  ).toBe(instance);
+  const marker = page.locator(".leaflet-marker-icon").nth(6);
+  await marker.click();
+  await expect(page.locator(".details-sheet[open]")).toBeVisible();
 });

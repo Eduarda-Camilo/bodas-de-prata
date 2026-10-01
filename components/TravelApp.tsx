@@ -30,6 +30,7 @@ import {
 } from "@/lib/time";
 import EventCard, { CompletionButton } from "./EventCard";
 import IllustratedRouteMap from "./IllustratedRouteMap";
+import BottomSheet from "./BottomSheet";
 import Onboarding from "./Onboarding";
 import PlaceDetails from "./PlaceDetails";
 import { PhotoGallery } from "./PhotoGallery";
@@ -101,8 +102,33 @@ export default function TravelApp({
     window.addEventListener("online", onlineChange);
     window.addEventListener("offline", onlineChange);
     const interval = setInterval(refreshDate, 60000);
-    if ("serviceWorker" in navigator)
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if ("serviceWorker" in navigator) {
+      if (process.env.NODE_ENV === "production")
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      else {
+        // Development bundles change at stable URLs: never retain an old UI while editing.
+        navigator.serviceWorker
+          .getRegistration("/")
+          .then((registration) => {
+            if (
+              registration?.active?.scriptURL ===
+              new URL("/sw.js", location.href).href
+            )
+              return registration.unregister();
+          })
+          .catch(() => {});
+        caches
+          .keys()
+          .then((keys) =>
+            Promise.all(
+              keys
+                .filter((key) => key.startsWith("bodas-shell-"))
+                .map((key) => caches.delete(key)),
+            ),
+          )
+          .catch(() => {});
+      }
+    }
     return () => {
       clearInterval(interval);
       window.removeEventListener("online", onlineChange);
@@ -852,22 +878,15 @@ export default function TravelApp({
   );
 }
 function ExpandedMap({ onClose }: { onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    ref.current?.showModal();
-  }, []);
   return (
-    <dialog ref={ref} className="expanded-map-dialog" onCancel={onClose}>
-      <div className="sheet-top">
-        <h2>Nossa jornada</h2>
-        <button
-          className="icon-button"
-          onClick={onClose}
-          aria-label="Fechar mapa ilustrado"
-        >
-          <X />
-        </button>
-      </div>
+    <BottomSheet
+      open
+      onClose={onClose}
+      className="expanded-map-dialog"
+      labelledBy="illustrated-map-title"
+      closeLabel="Fechar mapa ilustrado"
+      heading={<h2 id="illustrated-map-title">Nossa jornada</h2>}
+    >
       <p className="caption">
         Role para explorar. A rota é ilustrativa, com cidades em posições
         geográficas aproximadas.
@@ -875,6 +894,6 @@ function ExpandedMap({ onClose }: { onClose: () => void }) {
       <div className="expanded-map-scroll">
         <IllustratedRouteMap />
       </div>
-    </dialog>
+    </BottomSheet>
   );
 }

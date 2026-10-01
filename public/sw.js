@@ -1,5 +1,5 @@
 // Cache only public static assets and the authorized HTML shell. Never API responses/photos/tokens.
-const CACHE = "bodas-shell-v1";
+const CACHE = "bodas-shell-v2";
 const STATIC = [
   "/journey.svg",
   "/manifest.webmanifest",

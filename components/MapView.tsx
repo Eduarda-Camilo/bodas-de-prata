@@ -3,7 +3,19 @@ import { useEffect, useRef, useState } from "react";
 import type { TripEvent } from "@/data/types";
 import { cities, journey, returnJourney } from "@/data/places";
 import { categories } from "./Icons";
+import { mapTiles } from "@/lib/map-tiles";
+import type { Marker } from "leaflet";
 import "leaflet/dist/leaflet.css";
+const symbols: Record<string, string> = {
+  stamp: "P",
+  accommodation: "H",
+  restaurant: "R",
+  special: "25",
+  attraction: "A",
+  stop: "•",
+  beach: "≈",
+  boat: "≈",
+};
 export default function MapView({
   events,
   checks,
@@ -15,6 +27,19 @@ export default function MapView({
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [tileError, setTileError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const checksRef = useRef(checks);
+  const placeMarkers = useRef<{ event: TripEvent; marker: Marker }[]>([]);
+  useEffect(() => {
+    checksRef.current = checks;
+    for (const { event, marker } of placeMarkers.current) {
+      const pin = marker.getElement()?.querySelector(".place-pin");
+      if (pin) {
+        pin.textContent = checks[event.id] ? "✓" : (symbols[event.type] ?? "•");
+        pin.classList.toggle("done-pin", Boolean(checks[event.id]));
+      }
+    }
+  }, [checks]);
   useEffect(() => {
     let cleanup = () => {};
     let cancelled = false;
@@ -24,12 +49,19 @@ export default function MapView({
         [-21.6, -44.35],
         7,
       );
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 18,
-      })
-        .on("tileerror", () => setTileError(true))
+      const tiles = L.tileLayer(mapTiles.url, {
+        attribution: mapTiles.attribution,
+        subdomains: mapTiles.subdomains,
+        maxZoom: mapTiles.maxZoom,
+      });
+      let failed = false;
+      tiles
+        .on("tileerror", () => {
+          if (cancelled || failed) return;
+          failed = true;
+          map.removeLayer(tiles);
+          setTileError(true);
+        })
         .addTo(map);
       L.polyline(
         journey.map(
@@ -76,19 +108,9 @@ export default function MapView({
           event.type === "city"
         )
           continue;
-        const symbols: Record<string, string> = {
-          stamp: "P",
-          accommodation: "H",
-          restaurant: "R",
-          special: "25",
-          attraction: "A",
-          stop: "•",
-          beach: "≈",
-          boat: "≈",
-        };
-        L.marker([loc.latitude, loc.longitude], {
+        const marker = L.marker([loc.latitude, loc.longitude], {
           icon: L.divIcon({
-            html: `<span class="place-pin ${checks[event.id] ? "done-pin" : ""}">${checks[event.id] ? "✓" : (symbols[event.type] ?? "•")}</span>`,
+            html: `<span class="place-pin ${checksRef.current[event.id] ? "done-pin" : ""}">${checksRef.current[event.id] ? "✓" : (symbols[event.type] ?? "•")}</span>`,
             className: "travel-pin",
             iconSize: [36, 36],
             iconAnchor: [18, 18],
@@ -97,15 +119,19 @@ export default function MapView({
           .bindTooltip(`${categories[event.type]} · ${event.title}`)
           .on("click", () => onSelect(event))
           .addTo(map);
+        placeMarkers.current.push({ event, marker });
       }
       map.fitBounds(markers, { padding: [25, 25] });
-      cleanup = () => map.remove();
+      cleanup = () => {
+        placeMarkers.current = [];
+        map.remove();
+      };
     });
     return () => {
       cancelled = true;
       cleanup();
     };
-  }, [events, checks, onSelect]);
+  }, [events, onSelect, retry]);
   return (
     <>
       <div
@@ -114,10 +140,21 @@ export default function MapView({
         aria-label="Mapa interativo da viagem"
       />
       {tileError && (
-        <p className="notice">
-          O mapa de ruas não carregou. O roteiro e os botões do Google Maps
-          continuam disponíveis.
-        </p>
+        <div className="notice map-notice" role="status">
+          <p>
+            O mapa de ruas não carregou. Os pontos, o roteiro e os botões do
+            Google Maps continuam disponíveis.
+          </p>
+          <button
+            className="button secondary"
+            onClick={() => {
+              setTileError(false);
+              setRetry((value) => value + 1);
+            }}
+          >
+            Tentar carregar o mapa
+          </button>
+        </div>
       )}
       <p className="caption">
         Linhas mostram o caminho geral, não navegação. Pins de cidades são

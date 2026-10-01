@@ -1142,38 +1142,89 @@ svg {
 .onboarding-tips svg {
   color: var(--primary);
 }
-dialog {
-  color: var(--foreground);
-  border: 0;
-  padding: 0;
-  background: white;
-}
-dialog::backdrop {
-  background: #26241fc0;
-  backdrop-filter: blur(3px);
-}
-.details-sheet {
+/* Native dialogs share a content-sized bottom sheet, including nested photo sheets. */
+.bottom-sheet {
   position: fixed;
   inset: auto 0 0;
   margin: 0 auto;
-  width: 100%;
-  max-width: 600px;
-  max-height: 90svh;
+  width: 100vw;
+  max-width: var(--sheet-width, 600px);
+  height: auto;
+  max-height: 92svh;
+  max-height: min(92svh, calc(100dvh - env(safe-area-inset-top) - 16px));
+  padding: 0;
+  border: 0;
   border-radius: 24px 24px 0 0;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 -12px 45px #302d2826;
+  overflow: hidden;
+}
+.bottom-sheet[open] {
+  display: flex;
+  flex-direction: column;
+  animation: sheet-rise 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.bottom-sheet::backdrop {
+  background: #26241f99;
+  backdrop-filter: blur(3px);
+  animation: sheet-dim 240ms ease-out;
+}
+.sheet-handle {
+  flex-shrink: 0;
+  width: 38px;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--border);
+  margin: 10px auto 8px;
+}
+.bottom-sheet-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 20px 12px;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+}
+.bottom-sheet-heading {
+  min-width: 0;
+}
+.bottom-sheet-heading h2 {
+  font-size: 24px;
+  margin: 0;
+}
+.bottom-sheet-heading .eyebrow {
+  margin: 0;
+}
+.bottom-sheet-body {
+  min-height: 0;
+  overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 22px 24px calc(26px + env(safe-area-inset-bottom));
 }
 .sheet-content {
-  padding: 18px 24px calc(35px + env(safe-area-inset-bottom));
+  padding: 0;
 }
-.sheet-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
-.sheet-top .eyebrow {
-  margin: 0;
+@keyframes sheet-dim {
+  from {
+    background: transparent;
+  }
+  to {
+    background: #26241f99;
+  }
 }
 .sheet-content h2 {
   font-size: 32px;
@@ -1296,26 +1347,15 @@ summary {
   height: 100%;
   object-fit: cover;
 }
-.photo-dialog {
-  max-width: 600px;
-  width: calc(100% - 24px);
-  max-height: 90svh;
-  padding: 18px;
-  border-radius: 20px;
-  margin: auto;
-}
-.photo-dialog .close {
-  margin-left: auto;
-  display: flex;
-  margin-bottom: 14px;
-}
-.photo-dialog > img {
-  max-height: 65svh;
+.photo-dialog .bottom-sheet-body > img {
+  width: 100%;
+  max-height: 52svh;
   object-fit: contain;
   margin: auto;
+  border-radius: 12px;
 }
-.photo-dialog > p {
-  font-size: 12px;
+.photo-dialog .bottom-sheet-body > p {
+  font-size: 14px;
   color: var(--muted);
   margin-top: 12px;
 }
@@ -1325,17 +1365,10 @@ summary {
 .delete-confirm .button {
   margin: 5px;
 }
-.expanded-map-dialog {
-  width: calc(100% - 20px);
-  max-width: 900px;
-  max-height: 92svh;
-  padding: 20px;
-  border-radius: 20px;
-  margin: auto;
-}
-.expanded-map-dialog .sheet-top h2 {
-  margin: 0;
-  font-size: 26px;
+@media (min-width: 700px) {
+  .expanded-map-dialog {
+    --sheet-width: 900px;
+  }
 }
 .expanded-map-scroll {
   overflow: auto;
@@ -1471,4 +1504,19 @@ summary {
 }
 .stay-card small {
   font-size: 14px;
+}
+
+.map-notice p {
+  margin-bottom: 12px;
+}
+.functional-map {
+  background: var(--surface);
+}
+@media (max-width: 374px) {
+  .day-selector {
+    margin-left: -18px;
+    margin-right: -18px;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
 }
