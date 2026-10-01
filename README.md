@@ -224,3 +224,21 @@ As integrações estão implementadas, mas só podem ser validadas de ponta a po
 - Auditoria npm: nenhuma vulnerabilidade conhecida nas versões do lockfile durante a verificação.
 - A política de rede desta máquina bloqueou o acesso real aos tiles OpenStreetMap (CONNECT 403). O engine Leaflet, os controles, as camadas locais e a mensagem de fallback foram verificados; carregamento dos tiles reais ainda precisa ser conferido depois de permitir `a.tile.openstreetmap.org`, `b.tile.openstreetmap.org`, `c.tile.openstreetmap.org` (e `tile.openstreetmap.org`) no ambiente. As adições foram salvas no rascunho de configurações da nuvem. Isso não torna os tiles offline nem aplica a mesma restrição aos celulares após deploy na Vercel.
 - Supabase e OAuth/Drive reais ainda não foram testados: credenciais não foram fornecidas. Teste esses serviços antes de entregar o link definitivo aos seus pais.
+
+## Trabalhar no Windows e continuar na nuvem
+
+O código está no branch `main` de `Eduarda-Camilo/bodas-de-prata`. Use um clone Git, não um ZIP, para preservar o vínculo e o histórico.
+
+O script `scripts/setup-windows.ps1` clona na pasta solicitada no Windows (ou atualiza um checkout limpo no branch `main`), instala pelo lockfile e inicia o site. Requer Git for Windows e Node.js 24 LTS. Ele recusa pastas não vazias sem Git, alterações locais, outro repositório e outro branch. Usa `git pull --ff-only`: um histórico divergente interrompe a operação, sem merge automático, reset ou exclusão de arquivos.
+
+Você pode baixar esse script pelo botão Raw no GitHub e executá-lo no PowerShell. Para outro caminho:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1 -Destination 'C:\caminho\bodas-de-prata'
+```
+
+A opção de ExecutionPolicy vale somente para esse processo, não altera a política permanente do Windows. Se a política da sua organização impedir scripts, execute manualmente `git clone`, `npm ci` e `npm run dev` conforme as instruções acima; não altere políticas corporativas.
+
+Antes de editar em qualquer máquina: `git status`, seguido de `git pull --ff-only origin main` com a árvore limpa. Depois de editar: revise `git diff`, faça commit e `git push origin main`. Antes de pedir continuação nesta nuvem, envie suas alterações locais ao GitHub; antes de continuar no Windows, puxe os commits publicados daqui. Não edite os mesmos arquivos simultaneamente nas duas máquinas. Isso reduz conflitos; nenhum fluxo pode garantir ausência absoluta de conflitos quando existem alterações paralelas.
+
+Nunca use `git reset --hard`, `git clean -fd`, `git push --force` ou substitua a pasta `.git` para sincronizar. Se `--ff-only` falhar, pare e resolva os commits divergentes preservando os dois lados. `.env.local`, `.env.drive`, `node_modules` e `.next` são locais/ignorados e não devem ser copiados para o GitHub.
